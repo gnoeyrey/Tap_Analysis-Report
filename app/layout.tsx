@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "My App",
-  description: "Management System",
+  title: "TAP 기업진단",
+  
 };
 
 export default function RootLayout({
