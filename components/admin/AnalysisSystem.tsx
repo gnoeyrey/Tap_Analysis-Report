@@ -5,9 +5,12 @@ import { supabase } from '@/lib/supabaseClient';
 import { StartupDetail } from './types';
 
 interface AnalysisSystemProps {
-  selectedItem: StartupDetail;
+  selectedItem: any; 
   onClose: () => void;
+  onSave: (data: any) => Promise<any>;
 }
+
+
 
 // 1. 시스템 기본 고정 질문 세트
 const DEFAULT_QUESTIONS: Record<string, any[]> = {
@@ -48,7 +51,7 @@ const DEFAULT_QUESTIONS: Record<string, any[]> = {
   ]
 };
 
-export default function AnalysisSystem({ selectedItem, onClose }: AnalysisSystemProps) {
+export default function AnalysisSystem({ selectedItem, onClose, onSave }: AnalysisSystemProps) {
   const [activeTab, setActiveTab] = useState<string>('사업성');
   const [scores, setScores] = useState<Record<string, number>>({});
   const [comment, setComment] = useState<string>('');
