@@ -8,7 +8,9 @@ export async function GET(request: Request) {
   const next = searchParams.get('next') ?? '/admin'
 
   if (code) {
-    const cookieStore = cookies()
+    // 1. cookies()는 이제 Promise를 반환하므로 await를 붙여야 합니다.
+    const cookieStore = await cookies()
+    
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -18,14 +20,25 @@ export async function GET(request: Request) {
             return cookieStore.get(name)?.value
           },
           set(name: string, value: string, options: CookieOptions) {
-            cookieStore.set({ name, value, ...options })
+            // Server Component/Route Handler에서 쿠키를 설정할 때 에러가 발생할 수 있으므로
+            // try-catch로 감싸거나 단순 호출만 합니다.
+            try {
+              cookieStore.set({ name, value, ...options })
+            } catch (error) {
+              // 인증 프로세스 중 발생하는 무시 가능한 에러 대응
+            }
           },
           remove(name: string, options: CookieOptions) {
-            cookieStore.set({ name, value: '', ...options })
+            try {
+              cookieStore.set({ name, value: '', ...options })
+            } catch (error) {
+              // 인증 프로세스 중 발생하는 무시 가능한 에러 대응
+            }
           },
         },
       }
     )
+    
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`)
