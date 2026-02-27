@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import SidebarExplorer from '@/components/admin/SidebarExplorer';
 import StartupReport from '@/components/admin/StartupReport';
@@ -18,6 +18,12 @@ export default function AdminDashboard() {
   const [selectedFolder, setSelectedFolder] = useState<string>('root');
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['root']));
 
+  // --- [추가] 사이드바 너비 조절 및 개폐 상태 ---
+  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [isResizing, setIsResizing] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+  // 데이터 로드
   const fetchData = async () => {
     const { data: fData } = await supabase.from('folders').select('*').order('name');
     const { data: sData } = await supabase.from('startups').select('*').order('company_name');
@@ -27,6 +33,38 @@ export default function AdminDashboard() {
 
   useEffect(() => { fetchData(); }, []);
 
+  // 리사이징 핸들러
+  const startResizing = useCallback(() => {
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback(
+    (mouseMoveEvent: MouseEvent) => {
+      if (isResizing) {
+        const newWidth = mouseMoveEvent.clientX;
+        // 최소 200px, 최대 600px 제한
+        if (newWidth > 200 && newWidth < 600) {
+          setSidebarWidth(newWidth);
+        }
+      }
+    },
+    [isResizing]
+  );
+
+  useEffect(() => {
+    window.addEventListener("mousemove", resize);
+    window.addEventListener("mouseup", stopResizing);
+    return () => {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [resize, stopResizing]);
+
+  // 기업 상세 정보 로드
   const loadStartupDetail = async (item: any) => {
     const sId = item.id;
     const [edu, car, inv, svc, sal, ip, hist, awd] = await Promise.all([
@@ -46,6 +84,7 @@ export default function AdminDashboard() {
       services: svc.data || [], sales: sal.data || [], ips: ip.data || [],
       biz_history: hist.data || [], awards: awd.data || [],
     });
+    setActiveMenu('folder');
     setViewMode('report');
   };
 
@@ -62,7 +101,6 @@ export default function AdminDashboard() {
     alert(`현재 폴더의 배포 링크가 복사되었습니다.`);
   };
 
-  // ★ 헤더용 전체 경로 계산 로직
   const getPath = () => {
     if (!selectedFolder || selectedFolder === 'root') return 'ROOT';
     const pathNames: string[] = [];
@@ -79,39 +117,59 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="flex h-screen bg-white text-slate-900 overflow-hidden font-sans">
+    <div className={`flex h-screen bg-white text-slate-900 overflow-hidden font-sans relative ${isResizing ? 'select-none cursor-col-resize' : ''}`}>
+      
       {/* --- 사이드바 --- */}
-      <aside className="w-[300px] border-r border-slate-200 flex flex-col bg-slate-50 shrink-0">
-        <div className="p-8 pb-4">
-          <h1 className="text-[27px] font-black tracking-tight text-slate-800 mb-8 uppercase italic text-center">SYSTEM</h1>
-          <nav className="space-y-2 mb-8 text-[15px]">
-            <button 
-              onClick={() => {setActiveMenu('dashboard'); setViewMode('empty'); setSelectedItem(null);}} 
-              className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl font-bold transition-all ${activeMenu === 'dashboard' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-500 hover:bg-slate-200'}`}
-            >
-              📊 대시보드
-            </button>
-            <button onClick={() => {setActiveMenu('folder'); setViewMode('empty');}} className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl font-bold transition-all ${activeMenu === 'folder' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-200'}`}>📁 폴더</button>
-          </nav>
-          <div className="border-t border-slate-200 pt-6">
-            <p className="text-[12px] font-black text-slate-400 uppercase tracking-widest px-2 mb-4">Explorer</p>
+      <aside 
+        style={{ width: isSidebarOpen ? `${sidebarWidth}px` : '0px' }}
+        className={`border-r border-slate-200 flex flex-col bg-slate-50 shrink-0 transition-[width,opacity] duration-300 ease-in-out relative
+          ${!isSidebarOpen ? 'opacity-0' : 'opacity-100'}`}
+      >
+        <div style={{ minWidth: `${sidebarWidth}px` }} className="flex flex-col h-full overflow-hidden">
+          <div className="p-8 pb-4">
+            <h1 className="text-[27px] font-black tracking-tight text-slate-800 mb-8 uppercase italic text-left">TAP</h1>
+            <nav className="space-y-2 mb-8 text-[15px]">
+              <button 
+                onClick={() => setActiveMenu('dashboard')} 
+                className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl font-bold transition-all ${activeMenu === 'dashboard' ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-500 hover:bg-slate-200'}`}
+              >
+                📊 대시보드
+              </button>
+            </nav>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 pb-10 custom-scrollbar border-t border-slate-100 pt-4">
+            <SidebarExplorer
+              folders={folders}
+              startups={startups}
+              selectedFolder={selectedFolder}
+              setSelectedFolder={setSelectedFolder}
+              expandedFolders={expandedFolders}
+              toggleFolder={toggleFolder}
+              selectedItemId={selectedItem?.id}
+              onSelectStartup={loadStartupDetail}
+              refreshData={fetchData}
+            />
           </div>
         </div>
 
-        <div className={`flex-1 overflow-y-auto px-5 pb-10 custom-scrollbar transition-opacity duration-300 ${activeMenu === 'folder' || activeMenu === 'dashboard' ? 'opacity-100' : 'opacity-0'}`}>
-          <SidebarExplorer
-            folders={folders}
-            startups={startups}
-            selectedFolder={selectedFolder}
-            setSelectedFolder={setSelectedFolder}
-            expandedFolders={expandedFolders}
-            toggleFolder={toggleFolder}
-            selectedItemId={selectedItem?.id}
-            onSelectStartup={loadStartupDetail}
-            refreshData={fetchData}
+        {/* --- 너비 조절 핸들 (우측 경계선) --- */}
+        {isSidebarOpen && (
+          <div
+            onMouseDown={startResizing}
+            className={`absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-blue-400/30 transition-colors z-50 ${isResizing ? 'bg-blue-500 w-1' : ''}`}
           />
-        </div>
+        )}
       </aside>
+
+      {/* --- 사이드바 토글 버튼 (중앙 화살표) --- */}
+      <button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className="absolute top-1/2 -translate-y-1/2 z-[60] w-5 h-12 bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-900 shadow-sm transition-all rounded-r-lg border-l-0"
+        style={{ left: isSidebarOpen ? `${sidebarWidth}px` : '0px' }}
+      >
+        {isSidebarOpen ? '◀' : '▶'}
+      </button>
 
       {/* --- 메인 영역 --- */}
       <main className="flex-1 flex flex-col bg-slate-50/30 overflow-hidden">
@@ -124,26 +182,28 @@ export default function AdminDashboard() {
             {['report', 'analysis', 'result'].map((mode) => (
               <button 
                 key={mode} 
-                onClick={() => selectedItem && setViewMode(mode as any)} 
-                className={`text-[14px] font-black uppercase tracking-widest transition-all ${viewMode === mode ? 'text-blue-600 underline underline-offset-8 decoration-2' : selectedItem ? 'text-slate-500 hover:text-slate-800' : 'text-slate-300 cursor-not-allowed'}`}
+                onClick={() => {
+                  if (selectedItem) {
+                    setActiveMenu('folder');
+                    setViewMode(mode as any);
+                  }
+                }} 
+                className={`text-[14px] font-black uppercase tracking-widest transition-all ${viewMode === mode && activeMenu === 'folder' ? 'text-blue-600 underline underline-offset-8 decoration-2' : selectedItem ? 'text-slate-500 hover:text-slate-800' : 'text-slate-300 cursor-not-allowed'}`}
               >
                 {mode === 'report' ? '원문 보기' : mode === 'analysis' ? '진단하기' : '진단결과'}
               </button>
             ))}
           </div>
           <div className="flex-1 flex justify-end">
-             <button onClick={copyShareLink} className="px-6 py-3 bg-slate-900 text-white text-[13px] font-black rounded-xl shadow-md uppercase hover:bg-blue-600 transition-all">Copy Link 🔗</button>
+             <button onClick={copyShareLink} className="px-6 py-3 bg-slate-900 text-white text-[13px] font-black rounded-xl shadow-md uppercase hover:bg-blue-600 transition-all active:scale-95">Copy Link 🔗</button>
           </div>
         </header>
 
         <div className="flex-1 overflow-auto p-12 custom-scrollbar">
           {activeMenu === 'dashboard' ? (
-            <Dashboard 
-              folderId={selectedFolder} 
-              onSelectFolder={(id) => setSelectedFolder(id)} 
-            />
+            <Dashboard folderId={selectedFolder} onSelectFolder={(id) => setSelectedFolder(id)} />
           ) : (
-            <>
+            <div className="h-full">
               {viewMode === 'empty' ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-200 uppercase font-black italic tracking-widest text-center">
                   <span className="text-[80px] mb-4 opacity-50">📄</span>
@@ -158,10 +218,9 @@ export default function AdminDashboard() {
               ) : (
                 <div className="max-w-4xl mx-auto bg-white p-12 rounded-[40px] shadow-xl text-center">
                   <h2 className="text-2xl font-black mb-4 uppercase italic">Feature Under Development</h2>
-                  <p className="text-slate-400 font-bold uppercase tracking-widest">[{viewMode}] 모드는 현재 개발 진행 중입니다.</p>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </main>

@@ -19,7 +19,7 @@ export default function AdminLayout({
         <div className="flex items-center gap-4">
           <span className="text-2xl">📑</span>
           <h1 className="text-xl font-black tracking-tighter uppercase">
-            Management System <span className="text-gray-400"></span>
+            TAP 기업 진단 시스템 <span className="text-gray-400"></span>
           </h1>
         </div>
       </header>
