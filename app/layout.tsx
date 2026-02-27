@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "TAP 기업진단",
-  
+  description: "TAP Corporate diagnosis",
 };
 
 export default function RootLayout({
