@@ -31,4 +31,5 @@ export interface StartupDetail {
   ips?: any[];
   biz_history?: any[];
   awards?: any[];
+  sort_order?: number;
 }

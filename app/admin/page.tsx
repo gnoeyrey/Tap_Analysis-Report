@@ -207,7 +207,7 @@ export default function AdminDashboard() {
               {viewMode === 'empty' ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-200 uppercase font-black italic tracking-widest text-center">
                   <span className="text-[80px] mb-4 opacity-50">📄</span>
-                  <p>Select a startup from the explorer<br/>to view details</p>
+                  <p>기업명을 선택해주세요</p>
                 </div>
               ) : viewMode === 'report' && selectedItem ? (
                 <StartupReport selectedItem={selectedItem} onClose={() => setViewMode('empty')} />

@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Folder } from './types';
 
 interface Props {
-  folders: Folder[];
+  folders: (Folder & { sort_order?: number })[]; // Folder 타입에 sort_order가 있다고 강제로 알려줌
   startups: any[];
   selectedFolder: string;
   setSelectedFolder: (id: string) => void;
@@ -14,6 +14,7 @@ interface Props {
   selectedItemId?: string | null;
   onSelectStartup: (s: any) => void;
   refreshData: () => void;
+  
 }
 
 export default function SidebarExplorer({ 
