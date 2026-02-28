@@ -185,7 +185,7 @@ export default function SidebarExplorer({
       >
         <div className="flex items-center gap-2 pointer-events-none">
           <span className="text-[10px] w-3">{expandedFolders.has('root') ? '▼' : '▶'}</span>
-          <span className="text-[15px] uppercase font-bold tracking-tight text-slate-600">📂 Root Directory</span>
+          <span className="text-[15px] uppercase font-bold tracking-tight text-slate-600">📂 폴더</span>
         </div>
         <button 
           onClick={(e) => handleAddFolder(e, 'root')}

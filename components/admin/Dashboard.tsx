@@ -154,7 +154,6 @@ export default function Dashboard({ folderId, onSelectFolder }: DashboardProps) 
       <div className="bg-white p-8 rounded-[32px] shadow-xl border border-slate-50 flex items-center justify-between">
         <div className="flex-1 min-w-0">
           <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic truncate">{dynamicTitle}</h1>
-          <p className="text-xs font-bold text-blue-600 mt-2 uppercase tracking-widest opacity-60">Insight Report Based on {startupCount} Companies</p>
         </div>
       </div>
 

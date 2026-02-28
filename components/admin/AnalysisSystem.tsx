@@ -32,7 +32,7 @@ const DEFAULT_QUESTIONS: Record<string, any[]> = {
     { id: 'tech_1', label: '기술개발 완성도', guide: '① 아이디어 단계에 있는 기술\n② 연구개발 진행 단계에 있는 기술\n③ 연구개발 완료 단계에 있는 기술\n④ 상용화를 위한 시제품 제작단계에 있는 기술\n⑤ 상용화 및 양산기준을 충족시킬 수 있는 입증된 기술' },
     { id: 'tech_2', label: '유사 및 대체 기술 출현 가능성', guide: '① 적용 가능한 대체기술이 다수 존재함\n② 적용 가능한 대체기술이 일부(3개 이하) 존재함\n③ 일부 사항이 보완되면 적용 가능한 대체기술이 존재함\n④ 수명 기간 내에 대체기술의 출현 가능성이 있음\n⑤ 평가 대상 기술의 수명 기간 내에는 대체기술의 출현 가능성이 없음' },
     { id: 'tech_3', label: '기술의 경쟁력', guide: '① 경쟁기술 대비 기능 및 성능이 미흡함\n② 경쟁기술 대비 기능 및 성능이 다소 미흡하나 보완 가능\n③ 경쟁기술 대비 기능 및 성능이 유사하거나 다소 우위에 있음\n④ 경쟁기술 대비 기능 및 성능이 우수함\n⑤ 경쟁기술이 없으며, 기능 및 성능이 매우 뛰어남' },
-    { id: 'tech_4', label: '모방 난이도', guide: '"① 모방이 용이하며, 이로 인해 사업자체의 존립도 영향을 받음\n② 모방이 비교적 용이하며, 이로 인해 사업의 이익감소가 우려 됨\n③ 모방이 쉽지는 않으며, 모방을 통해 이익이 크게 침해받지는 않음\n④ 모방이 어렵고, 또한 모방여부를 쉽게 식별할 수 있음\n⑤ 고도의 기술축적이 필요하여 모방이 거의 불가능' },
+    { id: 'tech_4', label: '모방 난이도', guide: '① 모방이 용이하며, 이로 인해 사업자체의 존립도 영향을 받음\n② 모방이 비교적 용이하며, 이로 인해 사업의 이익감소가 우려 됨\n③ 모방이 쉽지는 않으며, 모방을 통해 이익이 크게 침해받지는 않음\n④ 모방이 어렵고, 또한 모방여부를 쉽게 식별할 수 있음\n⑤ 고도의 기술축적이 필요하여 모방이 거의 불가능' },
     { id: 'tech_5', label: '기술의 확장성', guide: '① 확장 가능성이 없음\n② 일부 기술에 대한 보완이 이루어진다면, 확장이 가능함\n③ 단일 기술분야, 단일 제품군 내에서 복수의 제품으로 확장이 가능함\n④ 단일 기술분야에서 복수의 제품군으로 확장이 가능함\n⑤ 해당 산업 외에도 복수의 기술 분야로 확장이 가능함' }
   ],
   '시장성': [
@@ -66,16 +66,10 @@ export default function AnalysisSystem({ selectedItem, onClose, onSave }: Analys
 
   useEffect(() => { loadAllData(); }, [selectedItem.id, activeTab]);
 
-  /**
-   * [데이터 동기화 핵심]
-   * 1. 현재 폴더 내의 '모든' 진단 데이터를 가져옵니다.
-   * 2. 다른 기업이 추가한 카테고리/질문 구조를 내 화면에 동기화합니다.
-   * 3. 점수는 오직 '나(현재 기업)'의 데이터만 가져옵니다.
-   */
+  
   const loadAllData = async () => {
     if (!selectedItem?.id) return;
     try {
-      // 해당 폴더의 모든 진단 데이터를 긁어옴
       const { data: folderAnalysis, error } = await supabase
         .from('startup_analysis')
         .select('*')
@@ -83,34 +77,39 @@ export default function AnalysisSystem({ selectedItem, onClose, onSave }: Analys
 
       if (error) throw error;
 
-      if (folderAnalysis && folderAnalysis.length > 0) {
-        const updatedQuestions = { ...DEFAULT_QUESTIONS };
-        const newCustomTabs: string[] = [];
+      // 핵심: 항상 기본 질문 세트에서 시작합니다.
+      const updatedQuestions = { ...DEFAULT_QUESTIONS }; 
+      const newCustomTabs: string[] = [];
 
+      if (folderAnalysis && folderAnalysis.length > 0) {
         folderAnalysis.forEach((d: any) => {
-          // 1. 질문 세트(템플릿) 동기화: DB에 저장된 최신 질문 세트 반영
+          // DB에 저장된 질문 세트가 있다면 해당 카테고리를 업데이트
           if (d.extra_questions && d.extra_questions.length > 0) {
             updatedQuestions[d.category] = d.extra_questions;
           }
-          // 2. 카테고리(탭) 동기화: 고정 탭이 아닌 새로운 탭 발견 시 추가
+          
+          // 고정 탭이 아닌 새로운 탭(카테고리) 추가
           if (!fixedTabs.includes(d.category)) {
             newCustomTabs.push(d.category);
           }
         });
 
+        // ⚠️ 중요: 현재 선택된 탭의 질문이 updatedQuestions에 없는 경우 방어 로직
+        if (!updatedQuestions[activeTab]) {
+          updatedQuestions[activeTab] = DEFAULT_QUESTIONS[activeTab] || [];
+        }
+
         setAllQuestions(updatedQuestions);
         setCustomTabs(Array.from(new Set(newCustomTabs)));
 
-        // 3. 현재 선택된 기업의 점수와 코멘트만 필터링해서 세팅
+        // 현재 기업의 점수 세팅
         const myData = folderAnalysis.find(d => d.startup_id === selectedItem.id && d.category === activeTab);
         setScores(myData?.scores || {});
         setComment(myData?.comment || '');
       } else {
-        // 데이터가 아예 없는 폴더일 경우 초기화
-        setScores({});
-        setComment('');
-        setCustomTabs([]);
+        // 데이터가 없는 경우 원본 데이터 유지
         setAllQuestions(DEFAULT_QUESTIONS);
+        setCustomTabs([]);
       }
     } catch (err) { console.error("Load Error:", err); }
   };
@@ -204,9 +203,9 @@ export default function AnalysisSystem({ selectedItem, onClose, onSave }: Analys
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-[#f8fafc] text-slate-700 text-[12px] font-black uppercase tracking-wider border-b border-slate-300">
-              <th className="p-4 w-[25%] text-center border-r border-slate-300">Question Item</th>
-              <th className="p-4 w-[12%] text-center border-r border-slate-300">Score</th>
-              <th className="p-4 w-[63%] text-center">Guidelines & Remarks (Edit Available)</th>
+              <th className="p-4 w-[25%] text-center border-r border-slate-300">질문사항</th>
+              <th className="p-4 w-[12%] text-center border-r border-slate-300">점수</th>
+              <th className="p-4 w-[63%] text-center">배점기준</th>
             </tr>
           </thead>
           <tbody>
