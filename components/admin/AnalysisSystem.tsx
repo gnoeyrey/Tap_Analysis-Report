@@ -54,7 +54,7 @@ const DEFAULT_QUESTIONS: Record<string, any[]> = {
     { id: 'glo_3', label: '해외 트랙션', guide: '① 해외 진출 시도 없음\n② 해외 문의 발생 수준\n③ 샘플 수출 또는 글로벌 전시 성과 도출\n④ 해외 현지 파일럿(PoC)성공 및 본 계약 협의\n⑤ 해외 매출 비중이 전체의 20%이상 달성' },
     { id: 'glo_4', label: '글로벌 인적 인프라', guide: '① 전담 인력 및 역량 부재\n② 겸직 인력 위주의 대응\n③ 외국어 및 글로벌 업무 가능 인력 확보\n④ 글로벌 사업 전담 조직 및 해외 거점 확보\n⑤ 해외 법인 설립 및 현지 리더십 채용 완료' },
     { id: 'glo_5', label: '글로벌 규제 및 수출 체계', guide: '① 해외 진출 불가능 수준(법적/제도적)\n② 규제정보 부족 및 대응 역량 미흡\n③ 글로벌 인증 준비 및 수출입 프로세스 설계\n④ 진출국 법률/세무/규제 검토 및 대응책 마련\n⑤ 국가별 필수 인증 및 통관 시스템 완비' },
-  ]
+  ],
 };
 
 export default function AnalysisSystem({ selectedItem, onClose, onSave }: AnalysisSystemProps) {
