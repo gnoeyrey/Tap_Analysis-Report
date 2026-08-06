@@ -130,6 +130,20 @@ export default function StartupReport({ selectedItem: initialItem, onClose }: Pr
     });
   };
 
+  // 관계 테이블은 DB에서 순서가 보장되지 않으므로 항상 같은 순서로 정렬해 표시
+  // (저장 후 행 순서가 뒤바뀌어 수정이 안 된 것처럼 보이는 현상 방지)
+  const normalizeData = (raw: any) => {
+    if (!raw) return raw;
+    const byField = (arr: any[], field: string) =>
+      [...(arr || [])].sort((a, b) => String(a?.[field] ?? '').localeCompare(String(b?.[field] ?? '')));
+    return {
+      ...raw,
+      investments: byField(raw.investments, 'period'),
+      financials: byField(raw.financials, 'year'),
+      awards: byField(raw.awards, 'year'),
+    };
+  };
+
   useEffect(() => {
     const loadData = async () => {
       if (!initialItem?.id) return;
@@ -151,8 +165,9 @@ export default function StartupReport({ selectedItem: initialItem, onClose }: Pr
           .single();
 
         if (fullData) {
-          setData(fullData);
-          setEditData(JSON.parse(JSON.stringify(fullData))); // Deep copy for editing
+          const normalized = normalizeData(fullData);
+          setData(normalized);
+          setEditData(JSON.parse(JSON.stringify(normalized))); // Deep copy for editing
         }
       } catch (err) {
         console.error("Fetch error:", err);
@@ -185,45 +200,73 @@ export default function StartupReport({ selectedItem: initialItem, onClose }: Pr
     setStatusMessage(null);
     try {
       // 1. 메인 startups 테이블 업데이트 추출
-      const { 
+      // id/created_at은 DB가 관리하는 값이므로 수정 대상에서 제외
+      const {
         education, careers, investments, ips, awards, financials, services, // 제외할 배열 관계 필드
-        ...mainDataPayload 
+        id: _mainId, created_at: _mainCreatedAt,
+        ...mainDataPayload
       } = editData;
 
-      const promises = [];
+      // 관계 테이블 행에서 DB로 보내면 안 되는 내부/자동 관리 필드 제거
+      const stripInternalFields = (item: any) => {
+        const { _isNew, _tempId, id, startup_id, created_at, ...clean } = item;
+        return clean;
+      };
 
-      // 메인 테이블 업데이트 Promise
-      promises.push(supabase.from('startups').update(mainDataPayload).eq('id', editData.id));
+      const tasks: { label: string; run: () => any }[] = [];
 
-      // 2. 7개 관계 테이블 업데이트/삽입 Promise
+      // 메인 테이블 업데이트
+      tasks.push({
+        label: '기본 정보',
+        run: () => supabase.from('startups').update(mainDataPayload).eq('id', editData.id)
+      });
+
+      // 2. 7개 관계 테이블 업데이트/삽입
       const relations = [
-        { key: 'education', table: 'startup_education' },
-        { key: 'careers', table: 'startup_careers' },
-        { key: 'financials', table: 'startup_financials' },
-        { key: 'investments', table: 'startup_investments' },
-        { key: 'ips', table: 'startup_ips' },
-        { key: 'awards', table: 'startup_awards' },
-        { key: 'services', table: 'startup_services' }
+        { key: 'education', table: 'startup_education', label: '학력' },
+        { key: 'careers', table: 'startup_careers', label: '경력' },
+        { key: 'financials', table: 'startup_financials', label: '매출/고용' },
+        { key: 'investments', table: 'startup_investments', label: '투자 현황' },
+        { key: 'ips', table: 'startup_ips', label: '지식재산권' },
+        { key: 'awards', table: 'startup_awards', label: '참여/수상' },
+        { key: 'services', table: 'startup_services', label: '제품/기술' }
       ];
 
-      relations.forEach(({ key, table }) => {
+      relations.forEach(({ key, table, label }) => {
         (editData[key] || []).forEach((item: any) => {
-          // 새로 추가된 행 → insert
-          if (item._isNew) {
-            const { _isNew, _tempId, ...cleanItem } = item;
-            promises.push(supabase.from(table).insert({ ...cleanItem, startup_id: editData.id }));
+          const payload = stripInternalFields(item);
+          // 새로 추가된 행 → insert (id가 없는 행도 신규로 취급)
+          if (item._isNew || !item.id) {
+            tasks.push({
+              label: `${label} 추가`,
+              run: () => supabase.from(table).insert({ ...payload, startup_id: editData.id })
+            });
           }
           // 기존 행 → update
-          else if (item.id) {
-            promises.push(supabase.from(table).update(item).eq('id', item.id));
+          else {
+            tasks.push({
+              label: `${label} 수정`,
+              run: () => supabase.from(table).update(payload).eq('id', item.id)
+            });
           }
         });
       });
 
-      await Promise.all(promises);
+      // [중요] Supabase는 저장 실패 시 오류를 throw하지 않고 결과에 담아 반환하므로,
+      // 모든 결과의 error를 직접 확인해야 실패를 놓치지 않는다.
+      const results = await Promise.all(tasks.map(t => t.run()));
+
+      const failures = results
+        .map((res: any, i: number) => ({ label: tasks[i].label, error: res?.error }))
+        .filter((r) => r.error);
+
+      if (failures.length > 0) {
+        console.error("Save failures:", failures);
+        throw new Error(`${failures[0].label} 저장 실패 (${failures[0].error.message})`);
+      }
 
       // 성공 후 Supabase에서 최신 데이터 다시 로드 (중복 방지 핵심)
-      const { data: freshData } = await supabase
+      const { data: freshData, error: reloadError } = await supabase
         .from('startups')
         .select(`
           *,
@@ -238,20 +281,24 @@ export default function StartupReport({ selectedItem: initialItem, onClose }: Pr
         .eq('id', editData.id)
         .single();
 
+      if (reloadError) throw reloadError;
+
       if (freshData) {
-        setData(freshData);
-        setEditData(JSON.parse(JSON.stringify(freshData)));
+        const normalized = normalizeData(freshData);
+        setData(normalized);
+        setEditData(JSON.parse(JSON.stringify(normalized)));
       }
 
       setIsEditing(false);
       setStatusMessage({ text: "저장 완료", type: 'success' });
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Save error:", error);
-      setStatusMessage({ text: "저장 실패. 다시 시도해주세요.", type: 'error' });
+      // 실제 실패 원인을 화면에 표시 (어느 항목이 왜 실패했는지 확인 가능)
+      setStatusMessage({ text: error?.message || "저장 실패. 다시 시도해주세요.", type: 'error' });
     } finally {
       setSaving(false);
-      setTimeout(() => setStatusMessage(null), 3000);
+      setTimeout(() => setStatusMessage(null), 8000);
     }
   };
 
