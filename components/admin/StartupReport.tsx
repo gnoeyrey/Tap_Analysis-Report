@@ -71,8 +71,23 @@ const EditableTextarea = ({
   );
 };
 
+// --- 관계 테이블 정의 (화면의 배열 필드 ↔ DB 테이블 매핑) ---
+const RELATIONS = [
+  { key: 'education', table: 'startup_education', label: '학력' },
+  { key: 'careers', table: 'startup_careers', label: '경력' },
+  { key: 'financials', table: 'startup_financials', label: '매출/고용' },
+  { key: 'investments', table: 'startup_investments', label: '투자 현황' },
+  { key: 'ips', table: 'startup_ips', label: '지식재산권' },
+  { key: 'awards', table: 'startup_awards', label: '참여/수상' },
+  { key: 'services', table: 'startup_services', label: '제품/기술' }
+];
+
+const RELATION_BY_KEY: Record<string, { table: string; label: string }> = RELATIONS.reduce(
+  (acc, r) => ({ ...acc, [r.key]: { table: r.table, label: r.label } }), {}
+);
+
 interface Props {
-  selectedItem: any; 
+  selectedItem: any;
   onClose: () => void;
 }
 
@@ -85,6 +100,8 @@ export default function StartupReport({ selectedItem: initialItem, onClose }: Pr
   const [editData, setEditData] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+  // 편집 중 삭제한 기존 행들 (저장 시 DB에서 실제로 삭제할 대상)
+  const [deletedRows, setDeletedRows] = useState<{ key: string; id: any }[]>([]);
 
   // --- 커스텀 필드 관리 ---
   const addCustomField = () => {
@@ -123,6 +140,12 @@ export default function StartupReport({ selectedItem: initialItem, onClose }: Pr
 
   const deleteArrayRow = (arrayField: string, index: number) => {
     if (!confirm('이 행을 삭제하시겠습니까?')) return;
+    // 이미 DB에 저장된 행이면 저장 시 실제로 삭제하도록 기록
+    // (기록하지 않으면 화면에서만 사라졌다가 다시 불러올 때 되살아남)
+    const removed = (editData?.[arrayField] || [])[index];
+    if (removed?.id && !removed._isNew) {
+      setDeletedRows((prev) => [...prev, { key: arrayField, id: removed.id }]);
+    }
     setEditData((prev: any) => {
       const updated = [...(prev[arrayField] || [])];
       updated.splice(index, 1);
@@ -221,18 +244,18 @@ export default function StartupReport({ selectedItem: initialItem, onClose }: Pr
         run: () => supabase.from('startups').update(mainDataPayload).eq('id', editData.id)
       });
 
-      // 2. 7개 관계 테이블 업데이트/삽입
-      const relations = [
-        { key: 'education', table: 'startup_education', label: '학력' },
-        { key: 'careers', table: 'startup_careers', label: '경력' },
-        { key: 'financials', table: 'startup_financials', label: '매출/고용' },
-        { key: 'investments', table: 'startup_investments', label: '투자 현황' },
-        { key: 'ips', table: 'startup_ips', label: '지식재산권' },
-        { key: 'awards', table: 'startup_awards', label: '참여/수상' },
-        { key: 'services', table: 'startup_services', label: '제품/기술' }
-      ];
+      // 2. 편집 중 삭제한 행들을 DB에서 실제로 삭제
+      deletedRows.forEach(({ key, id }) => {
+        const relation = RELATION_BY_KEY[key];
+        if (!relation) return;
+        tasks.push({
+          label: `${relation.label} 삭제`,
+          run: () => supabase.from(relation.table).delete().eq('id', id)
+        });
+      });
 
-      relations.forEach(({ key, table, label }) => {
+      // 3. 7개 관계 테이블 업데이트/삽입
+      RELATIONS.forEach(({ key, table, label }) => {
         (editData[key] || []).forEach((item: any) => {
           const payload = stripInternalFields(item);
           // 새로 추가된 행 → insert (id가 없는 행도 신규로 취급)
@@ -289,6 +312,7 @@ export default function StartupReport({ selectedItem: initialItem, onClose }: Pr
         setEditData(JSON.parse(JSON.stringify(normalized)));
       }
 
+      setDeletedRows([]);
       setIsEditing(false);
       setStatusMessage({ text: "저장 완료", type: 'success' });
 
@@ -304,6 +328,7 @@ export default function StartupReport({ selectedItem: initialItem, onClose }: Pr
 
   const handleCancel = () => {
     setEditData(JSON.parse(JSON.stringify(data))); // 원본 데이터로 롤백
+    setDeletedRows([]); // 삭제 예정 목록도 함께 롤백
     setIsEditing(false);
     setStatusMessage(null);
   };
